@@ -1,0 +1,78 @@
+# Local environment and credentials (keep safe templates versioned)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+/.local-config/
+/configs/**/*.local.yaml
+/configs/**/*.local.yml
+
+# Go binaries, test outputs and local workspaces
+/bin/
+/dist/
+/build/
+/server
+/baseline
+/ai-agent-scaffold
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+coverage.out
+coverage.html
+coverage/
+go.work
+go.work.sum
+
+# Frontend dependencies and generated Next.js / TypeScript files
+node_modules/
+.next/
+.pnp
+.pnp.*
+.pnpm-store/
+.npm/
+.turbo/
+.vercel/
+/frontend/out/
+/frontend/build/
+next-env.d.ts
+*.tsbuildinfo
+
+# Logs and temporary files
+*.log
+*.log.*
+logs/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# Local evaluation evidence and generated source snapshots
+# Keep evals/cases and evaluation scripts in Git.
+/evals/runs/
+/evals/baselines/
+
+# Local database / container persistence
+/deployments/mysql/data/
+/deployments/mysql/logs/
+/deployments/redis/data/
+dump.rdb
+appendonly.aof
+
+# IDE and operating-system metadata
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,24 @@
+app:
+  name: ai-agent-scaffold-go
+  env: local
+
+server:
+  addr: ":8091"
+
+database:
+  required: false
+  dsn: "root:123456@tcp(127.0.0.1:13306)/ai_agent_scaffold_go?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  required: false
+  addr: "127.0.0.1:16379"
+  password: ""
+  db: 0
+
+llm:
+  request-timeout: 5m
+
+agent:
+  config-paths:
+    - configs/agent/only-one-agent.yaml
+    - configs/agent/agent-draw-io.yaml

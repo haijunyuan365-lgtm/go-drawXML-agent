@@ -1,0 +1,53 @@
+services:
+  mysql:
+    image: mysql:8.0.32
+    container_name: mysql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: ai_agent_scaffold_go
+
+    ports:
+      - "13306:3306"
+
+    volumes:
+      - ./mysql/my.cnf:/etc/mysql/conf.d/mysql.cnf:ro
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123456"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+    networks:
+      - ai-agent-scaffold
+
+  redis:
+    image: redis:6.2
+    container_name: redis
+    restart: always
+
+    ports:
+      - "16379:6379"
+
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    command: redis-server /usr/local/etc/redis/redis.conf
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+    networks:
+      - ai-agent-scaffold
+
+networks:
+  ai-agent-scaffold:
+    driver: bridge

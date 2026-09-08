@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  ai-draw-io-front:
+    container_name: ai-draw-io-front
+    image: fuzhengwei/ai-draw-io-front:1.0
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # Also set it as runtime environment variable (for server-side rendering if applicable)
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8091/api/v1}
+      - NODE_ENV=production

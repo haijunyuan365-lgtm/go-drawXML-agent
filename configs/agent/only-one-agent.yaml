@@ -1,0 +1,43 @@
+ai:
+  agent:
+    config:
+      tables:
+        testAgent03:
+          app-name: testAgent03
+          agent:
+            agent-id: "100003"
+            agent-name: "single agent"
+            agent-desc: "single agent demo"
+          module:
+            ai-api:
+              base-url: ${OPENAI_BASE_URL}
+              api-key: ${OPENAI_API_KEY}
+              completions-path: "v1/chat/completions"
+              embeddings-path: "v1/embeddings"
+            chat-model:
+              model: "gpt-5.5"
+              tool-mcp-list:
+                - sse:
+                    name: baidu-search
+                    base-uri: ${BAIDU_SEARCH_MCP_BASE_URI}
+                    sse-endpoint: ${BAIDU_SEARCH_MCP_SSE_ENDPOINT}
+                    request-timeout: 500000
+                - sse:
+                    name: everything-test
+                    base-uri: http://127.0.0.1:3001
+                    sse-endpoint: /sse
+                    request-timeout: 120000
+              tool-skills-list:
+                - type: "resource"
+                  path: "agent/skills"
+            agents:
+              - name: "onlyAgent"
+                description: "study plan helper"
+                instruction: |
+                  Build a beginner-friendly study plan from the user's request.
+                output-key: result
+            runner:
+              agent-name: "onlyAgent"
+              plugin-name-list:
+                - "myTestPlugin"
+                - "myLogPlugin"

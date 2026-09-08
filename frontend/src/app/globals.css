@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Custom Theme Variables from login.html/index.html */
+  --bg0: #070a12;
+  --bg1: #0b1022;
+  --card: rgba(255, 255, 255, 0.06);
+  --card2: rgba(255, 255, 255, 0.08);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.72);
+  --muted2: rgba(255, 255, 255, 0.56);
+  --border: rgba(255, 255, 255, 0.12);
+  --primary: #62f6c7;
+  --primary2: #5aa9ff;
+  --danger: #ff5a7a;
+  --shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Utility classes for the custom theme */
+.theme-bg-gradient {
+  background: radial-gradient(1200px 600px at 20% 18%, rgba(98, 246, 199, 0.24), rgba(98, 246, 199, 0) 55%),
+    radial-gradient(900px 560px at 78% 20%, rgba(90, 169, 255, 0.22), rgba(90, 169, 255, 0) 55%),
+    radial-gradient(900px 640px at 55% 78%, rgba(255, 90, 122, 0.12), rgba(255, 90, 122, 0) 55%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+}
+
+.theme-card {
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
+  box-shadow: var(--shadow);
+}
+
+.theme-input {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+}
+
+.theme-input:focus {
+  border-color: rgba(98, 246, 199, 0.55);
+  box-shadow: 0 0 0 4px rgba(98, 246, 199, 0.12);
+}
+
+.theme-btn {
+  background: linear-gradient(135deg, var(--primary), var(--primary2));
+  color: rgba(7, 10, 18, 0.92);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
+}
+
+.theme-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}

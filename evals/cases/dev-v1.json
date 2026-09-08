@@ -1,0 +1,87 @@
+{
+  "dataset_id": "drawio-dev-v1",
+  "split": "development",
+  "purpose": "Day 1 baseline inputs. These are development examples, not a held-out quality benchmark.",
+  "cases": [
+    {
+      "id": "dev-01-login",
+      "category": "simple_flow",
+      "prompt": "画一个用户登录流程图：开始→输入账号密码→校验账号密码；正确则进入首页并结束，错误则显示错误提示并返回输入账号密码。所有节点用中文。只使用这里给出的信息，无需检索。",
+      "required_nodes": ["开始", "输入账号密码", "校验账号密码", "首页", "错误提示", "结束"],
+      "required_relations": ["校验成功→首页", "校验失败→错误提示→输入账号密码"],
+      "acceptance": ["成功与失败分支可区分", "重试回到输入节点", "节点标签为中文"]
+    },
+    {
+      "id": "dev-02-order",
+      "category": "conditional_flow",
+      "prompt": "画下单流程：用户提交订单，检查库存；库存不足则提示缺货并结束；库存充足则创建待支付订单，用户支付；支付成功后扣减库存并通知发货，支付失败则保留待支付状态。必须展示每个分支，不需要搜索。",
+      "required_nodes": ["提交订单", "检查库存", "缺货", "待支付订单", "支付", "扣减库存", "通知发货"],
+      "required_relations": ["库存不足→缺货→结束", "库存充足→创建待支付订单→支付", "支付成功→扣减库存→通知发货", "支付失败→待支付状态"],
+      "acceptance": ["失败分支不能触发发货", "不得遗漏库存不足分支"]
+    },
+    {
+      "id": "dev-03-approval",
+      "category": "multi_branch",
+      "prompt": "画报销审批流程：员工提交报销→主管审批；主管驳回则退回员工修改后重新提交。主管通过后判断金额是否大于5000元：大于则财务总监审批，否则直接财务付款。财务总监通过才付款，驳回则流程结束。无需外部检索。",
+      "required_nodes": ["提交报销", "主管审批", "员工修改", "金额判断", "财务总监审批", "财务付款", "结束"],
+      "required_relations": ["主管驳回→修改→重新提交", "金额>5000→财务总监审批", "金额≤5000→付款", "总监驳回→结束"],
+      "acceptance": ["5000元恰好走直接付款分支", "区分两种驳回路径"]
+    },
+    {
+      "id": "dev-04-three-tier",
+      "category": "architecture",
+      "prompt": "画一个三层Web系统架构：浏览器通过HTTPS访问Nginx，Nginx转发到Go API服务，Go API读写MySQL并访问Redis缓存。浏览器不能直接连接数据库。展示访问方向与组件名称，无需搜索。",
+      "required_nodes": ["浏览器", "Nginx", "Go API", "MySQL", "Redis"],
+      "required_relations": ["浏览器→Nginx→Go API", "Go API→MySQL", "Go API→Redis"],
+      "acceptance": ["HTTPS路径可见", "没有浏览器直连MySQL的边"]
+    },
+    {
+      "id": "dev-05-microservices",
+      "category": "complex_references",
+      "prompt": "画电商微服务架构：客户端→API网关；网关分别访问用户服务、订单服务和商品服务。订单服务同步调用库存服务，并向消息队列发布订单已支付事件；通知服务订阅该事件。每个服务有独立数据库，消息队列没有自己的业务数据库。不要增加其他服务，无需搜索。",
+      "required_nodes": ["客户端", "API网关", "用户服务", "订单服务", "商品服务", "库存服务", "消息队列", "通知服务"],
+      "required_relations": ["网关→用户/订单/商品服务", "订单服务→库存服务", "订单服务→消息队列→通知服务", "五个业务服务各自连接独立数据库"],
+      "acceptance": ["数据库不共享", "同步调用与异步事件有区分", "不增加需求之外的服务"]
+    },
+    {
+      "id": "dev-06-cache",
+      "category": "cache_flow",
+      "prompt": "画缓存读取流程：接收查询→查Redis；命中则返回缓存结果；未命中则查MySQL；数据库有数据则写入Redis后返回数据，无数据则返回未找到。不能在缓存命中时再查数据库。无需搜索。",
+      "required_nodes": ["接收查询", "Redis", "MySQL", "写入Redis", "返回数据", "未找到"],
+      "required_relations": ["缓存命中→返回", "缓存未命中→MySQL", "数据库有数据→写缓存→返回", "数据库无数据→未找到"],
+      "acceptance": ["命中路径不经过MySQL", "两个判断的分支清晰"]
+    },
+    {
+      "id": "dev-07-rag",
+      "category": "ai_architecture",
+      "prompt": "画RAG系统的数据流，分成离线入库和在线问答两部分。离线：文档→解析→切分→Embedding→向量库。在线：用户问题→问题Embedding→向量检索→上下文拼接→LLM→带来源的回答；原始问题也传入上下文拼接。两部分共用一个向量库。不用搜索。",
+      "required_nodes": ["文档", "解析", "切分", "Embedding", "向量库", "用户问题", "问题Embedding", "向量检索", "上下文拼接", "LLM", "带来源的回答"],
+      "required_relations": ["文档→解析→切分→Embedding→向量库", "问题→问题Embedding→检索", "向量库→检索结果→上下文拼接", "原始问题→上下文拼接→LLM→回答"],
+      "acceptance": ["离线和在线分区", "同一向量库连接两条链路", "原始问题不丢失"]
+    },
+    {
+      "id": "dev-08-agent-loop",
+      "category": "bounded_loop",
+      "prompt": "画一个绘图Agent工作流：需求分析→生成XML→校验XML；校验通过进入语义审查，语义审查通过后输出图纸。任一检查不通过时最多修复2次，每次修复后重新校验XML；修复次数耗尽则输出失败原因。必须展示退出条件。无需搜索。",
+      "required_nodes": ["需求分析", "生成XML", "校验XML", "语义审查", "修复", "修复次数判断", "输出图纸", "失败原因"],
+      "required_relations": ["校验通过→语义审查→通过→输出", "任一拒绝→预算判断→修复→校验XML", "预算耗尽→失败"],
+      "acceptance": ["修复循环没有重新分析需求", "两个检查均能走失败分支", "最多修复2次"]
+    },
+    {
+      "id": "dev-09-special-characters",
+      "category": "xml_escaping",
+      "prompt": "画三个节点依次连接的流程图，节点标签必须完整保留为：输入 A&B → 判断 x < 10 且 y > 0 → 输出\"成功\"。特殊字符应作为标签文字显示，不要省略或改写。无需搜索。",
+      "required_nodes": ["输入 A&B", "判断 x < 10 且 y > 0", "输出\"成功\""],
+      "required_relations": ["输入→判断→输出"],
+      "acceptance": ["XML能够解析", "渲染后的标签保留&、<、>、引号", "三个节点按顺序连接"]
+    },
+    {
+      "id": "dev-10-diamond",
+      "category": "merge_and_layout",
+      "prompt": "画一个从左向右的流程图：开始→并行分支，分支一为检查权限，分支二为检查额度；两个检查结果汇合后进入提交任务→结束。节点名称相同含义时只画一次，共用一个汇合节点。使用单页，不能有指向不存在节点的连线，无需搜索。",
+      "required_nodes": ["开始", "并行分支", "检查权限", "检查额度", "汇合", "提交任务", "结束"],
+      "required_relations": ["分支→权限检查→汇合", "分支→额度检查→汇合", "汇合→提交任务→结束"],
+      "acceptance": ["两个分支共用一个汇合节点", "从左到右布局", "单页且无悬空引用"]
+    }
+  ]
+}

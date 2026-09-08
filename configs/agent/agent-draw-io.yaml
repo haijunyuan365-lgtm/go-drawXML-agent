@@ -1,0 +1,108 @@
+ai:
+  agent:
+    config:
+      tables:
+        drawIoAgent:
+          app-name: drawIoAgent
+          agent:
+            agent-id: "300000"
+            agent-name: "AI交互式绘图智能体"
+            agent-desc: "人 + AI + Draw.io，交互式对话完成 draw.io 绘图。"
+          module:
+            ai-api:
+              base-url: ${OPENAI_BASE_URL}
+              api-key: ${OPENAI_API_KEY}
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: "gpt-5.5"
+              tool-mcp-list:
+                - sse:
+                    name: baidu-search
+                    base-uri: ${BAIDU_SEARCH_MCP_BASE_URI}
+                    sse-endpoint: ${BAIDU_SEARCH_MCP_SSE_ENDPOINT}
+                    request-timeout: 500000
+                - sse:
+                    name: everything-test
+                    base-uri: http://127.0.0.1:3001
+                    sse-endpoint: /sse
+                    request-timeout: 120000
+              tool-skills-list:
+                - type: "resource"
+                  path: "agent/skills"
+            agents:
+              # 1. 需求分析与检索智能体
+              - name: agent_analyst
+                description: 负责理解用户意图，调用工具检索信息，并整理出可用于绘图的需求描述。
+                # |表示后面的缩进内容是一段多行字符串。
+                instruction: |
+                  你是一个专业的绘图需求分析师。请基于用户最新的输入，输出一段中文文本，描述要绘制的图表。
+                  要求：
+                  1. 如有需要可调用可用工具（MCP）补充信息，但不要把工具调用结果原样贴出。
+                  2. 即便用户描述较简略，也要根据常识合理补全，不要要求用户继续补充信息。
+                  3. 输出必须是单段纯文本，明确包含：图表类型（流程图 / 时序图 / 类图 等）、关键节点、节点之间的关系或调用顺序、必要的布局提示。
+                  4. 严禁输出 JSON、Markdown、代码块或 XML，只输出自然语言描述。
+                output-key: analysis_result
+
+              # 2. 绘图执行智能体
+              - name: agent_drawer
+                description: 根据分析结果生成 Draw.io 的 mxfile XML 数据。
+                instruction: |
+                  你是一个 Draw.io 绘图专家。下面是上一步整理好的绘图需求：
+                  ---
+                  {analysis_result}
+                  ---
+                  请只输出一份合法的 draw.io XML，要求：
+                  1. 必须以 `<mxfile` 开头，以 `</mxfile>` 结尾，包含 `<diagram>` 与 `<mxGraphModel>`。
+                  2. 节点（mxCell vertex="1"）有合适的 `geometry` 坐标和大小，避免重叠。
+                  3. 连线（mxCell edge="1"）使用 `source` 与 `target` 引用节点 id，逻辑顺序清晰，避免明显交叉。
+                  4. 严禁输出任何 JSON、Markdown、代码块标记（```），不要写解释文字，输出从 `<mxfile` 第一个字符开始。
+                output-key: draft_diagram
+
+              # 3. 检查与优化智能体
+              - name: agent_reviewer
+                description: 检查绘图结果，修正语法问题，输出最终的裸 XML。
+                instruction: |
+                  你是一个 draw.io XML 质量检查员。下面是上一步生成的 XML：
+                  ---
+                  {draft_diagram}
+                  ---
+                  请按以下规则输出最终结果：
+                  1. 检查 XML 是否合法（标签闭合、属性正确、id 与 source/target 一致），有问题就直接修正。
+                  2. 如发现节点明显重叠或连线交叉，可微调 geometry 让布局更整洁，但不要新增/删除核心节点。
+                  3. 最终输出必须只有这份合法的 draw.io XML，必须以 `<mxfile` 开头，以 `</mxfile>` 结尾。
+                  4. 严禁输出任何 JSON、Markdown、代码块标记或解释文字。如果发现输入完全不像 XML，则按需求自行重写一份合法的最简 mxfile XML 后输出。
+                output-key: final_result
+
+            agent-workflows:
+              # 循环工作流示例
+              - type: loop
+                name: loop_refinement
+                description: 循环优化绘图结果
+                max-iterations: 3
+                sub-agents:
+                  - agent_drawer
+                  - agent_reviewer
+
+              # 并行工作流示例
+              - type: parallel
+                name: parallel_generation
+                description: 并行生成多个绘图方案
+                sub-agents:
+                  - agent_drawer
+                  - agent_drawer
+
+              # 对外使用的串行工作流
+              - type: sequential
+                name: sequential_draw_process
+                description: 标准绘图流程：分析 -> 绘图 -> 检查
+                sub-agents:
+                  - agent_analyst
+                  - agent_drawer
+                  - agent_reviewer
+
+            runner:
+              agent-name: sequential_draw_process
+              plugin-name-list:
+                - myTestPlugin
+                - myLogPlugin
