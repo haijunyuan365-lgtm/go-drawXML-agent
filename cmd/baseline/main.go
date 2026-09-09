@@ -219,6 +219,9 @@ func assembleOriginal(table model.AiAgentConfigTable, provider ports.ModelProvid
 	// Explicit controlled profile: no discovery/tool calls. Do not alter the production YAML.
 	table.Module.ChatModel.ToolMCPList = nil
 	table.Module.ChatModel.ToolSkillsList = nil
+	// 该命令采集的是 Day 1 的 Before 流程，后续新增的 Guardrail 不能修改或拒绝
+	// 原 Reviewer 输出，否则改造前后的评测口径会混在一起。
+	table.Module.Runner.OutputValidator = ""
 	recorder := &recordingFactory{Factory: adk.NewFactory(), secret: table.Module.AiAPI.APIKey}
 	registry := ports.NewInMemoryAgentRegistry()
 	factory := armoryfactory.NewDefaultFactory(provider, nil, nil, recorder, recorder.Factory, registry)

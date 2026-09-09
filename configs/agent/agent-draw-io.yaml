@@ -103,6 +103,8 @@ ai:
 
             runner:
               agent-name: sequential_draw_process
+              output-validator: drawio-xml
               plugin-name-list:
                 - myTestPlugin
                 - myLogPlugin
+

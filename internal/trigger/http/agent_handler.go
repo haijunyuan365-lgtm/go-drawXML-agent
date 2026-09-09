@@ -8,6 +8,7 @@ import (
 	"ai-agent-scaffold/internal/api/dto"
 	"ai-agent-scaffold/internal/api/response"
 	"ai-agent-scaffold/internal/domain/agent/service/chat"
+	"ai-agent-scaffold/internal/domain/validation"
 	"ai-agent-scaffold/pkg/types"
 
 	"github.com/gin-gonic/gin"
@@ -153,6 +154,20 @@ func chatStream(service *chat.Service) gin.HandlerFunc {
 
 // writeError 把领域错误统一转换成项目约定的 Envelope。
 func writeError(c *gin.Context, err error) {
+	// 校验失败有稳定业务码和机器可读 issues，前端不能把它当普通成功内容。
+	var validationErr *validation.Error
+	if errors.As(err, &validationErr) {
+		c.JSON(
+			http.StatusOK,
+			response.FailureWithData(
+				types.CodeOutputValidationFailed,
+				validationErr.Error(),
+				validationErr,
+			),
+		)
+		return
+	}
+
 	var appErr *types.AppError
 	if errors.As(err, &appErr) {
 		c.JSON(

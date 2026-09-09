@@ -2,11 +2,13 @@ package adk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	"ai-agent-scaffold/internal/domain/agent/model"
 	"ai-agent-scaffold/internal/domain/agent/ports"
+	"ai-agent-scaffold/internal/domain/validation"
 )
 
 // scriptedChatModel 按顺序返回预先配置好的模型响应。
@@ -274,4 +276,84 @@ func TestRunLLMToolCallLoop(t *testing.T) {
 			secondMessages[3].Content,
 		)
 	}
+}
+
+// 验证 Guardrail 通过时 Runner 仍逐字返回原结果，保持成功接口兼容。
+// 以下测试验证 Guardrail 的 Runner 边界：合法结果保持兼容，坏结果在同步和
+// 流式入口都不能发出，配置名称错误则必须在组装阶段暴露。
+func TestRunnerOutputValidatorAllowsValidDocument(t *testing.T) {
+	const output = `<mxfile><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="a" vertex="1" parent="1"><mxGeometry width="80" height="40"/></mxCell></root></mxGraphModel></diagram></mxfile>`
+	runner := newTestRunnerWithOutput(t, output, "drawio-xml")
+
+	outputs, err := runner.Run("user", "session", model.ChatContent{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(outputs) != 1 || outputs[0] != output {
+		t.Fatalf("unexpected outputs: %#v", outputs)
+	}
+}
+
+// 验证 Guardrail 拒绝时同步入口没有任何成功 outputs，并保留结构化问题。
+func TestRunnerOutputValidatorBlocksInvalidDocument(t *testing.T) {
+	runner := newTestRunnerWithOutput(t, `<mxfile><diagram>`, "drawio-xml")
+
+	outputs, err := runner.Run("user", "session", model.ChatContent{})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if outputs != nil {
+		t.Fatalf("invalid output must not be returned, got %#v", outputs)
+	}
+
+	var validationErr *validation.Error
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected validation.Error, got %T: %v", err, err)
+	}
+	if validationErr.Result.Passed || len(validationErr.Result.Issues) == 0 {
+		t.Fatalf("expected structured issues, got %+v", validationErr.Result)
+	}
+}
+
+// 验证流式入口会先完成整份 XML 校验，坏结果不会提前进入输出 Channel。
+func TestRunnerStreamDoesNotEmitInvalidDocument(t *testing.T) {
+	runner := newTestRunnerWithOutput(t, `<mxfile/>`, "drawio-xml")
+	outputs, errs := runner.Stream("user", "session", model.ChatContent{})
+
+	for output := range outputs {
+		t.Fatalf("invalid output was emitted: %q", output)
+	}
+	err := <-errs
+	var validationErr *validation.Error
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected validation.Error, got %T: %v", err, err)
+	}
+}
+
+// 配置名称拼错应在 Runner 组装时暴露，不能推迟到用户请求期间。
+func TestNewRunnerRejectsUnknownOutputValidator(t *testing.T) {
+	factory := NewFactory()
+	agent := &Agent{name: "test", kind: "llm", chatModel: &scriptedChatModel{}}
+
+	_, err := factory.NewRunner(context.Background(), "app", agent, nil, "missing-validator")
+	if err == nil {
+		t.Fatal("expected unknown validator to fail")
+	}
+}
+
+func newTestRunnerWithOutput(t *testing.T, output, validatorName string) model.Runner {
+	t.Helper()
+	factory := NewFactory()
+	agent := &Agent{
+		name: "test",
+		kind: "llm",
+		chatModel: &scriptedChatModel{replies: []ports.ChatReply{{
+			Content: output,
+		}}},
+	}
+	runner, err := factory.NewRunner(context.Background(), "app", agent, nil, validatorName)
+	if err != nil {
+		t.Fatalf("new runner: %v", err)
+	}
+	return runner
 }

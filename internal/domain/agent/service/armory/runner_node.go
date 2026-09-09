@@ -39,6 +39,7 @@ func (n RunnerNode) Apply(ctx context.Context, command model.ArmoryCommand, dyna
 		command.Table.AppName,
 		agent,
 		runnerConfig.PluginNameList,
+		runnerConfig.OutputValidator,
 	)
 	if err != nil {
 		return model.RegisteredAgent{}, err

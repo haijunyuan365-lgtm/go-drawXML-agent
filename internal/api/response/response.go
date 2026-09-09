@@ -22,3 +22,12 @@ func Failure(code, info string) Envelope[any] {
 		Info: info,
 	}
 }
+
+// FailureWithData 用于需要携带结构化诊断的失败响应；原 Failure 继续服务简单错误。
+func FailureWithData(code, info string, data any) Envelope[any] {
+	return Envelope[any]{
+		Code: code,
+		Info: info,
+		Data: data,
+	}
+}

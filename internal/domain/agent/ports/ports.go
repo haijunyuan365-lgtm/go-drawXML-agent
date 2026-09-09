@@ -93,7 +93,7 @@ type RunnerPlugin interface {
 }
 
 type RunnerFactory interface {
-	NewRunner(ctx context.Context, appName string, agent Agent, pluginNames []string) (model.Runner, error)
+	NewRunner(ctx context.Context, appName string, agent Agent, pluginNames []string, outputValidatorName string) (model.Runner, error)
 }
 
 type AgentRegistry interface {

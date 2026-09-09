@@ -8,6 +8,8 @@ import (
 
 	"ai-agent-scaffold/internal/domain/agent/model"
 	"ai-agent-scaffold/internal/domain/agent/ports"
+	"ai-agent-scaffold/internal/domain/diagram/drawio"
+	"ai-agent-scaffold/internal/domain/validation"
 
 	"google.golang.org/adk/plugin"
 	"google.golang.org/adk/plugin/loggingplugin"
@@ -24,6 +26,9 @@ type Factory struct {
 
 	// plugins 保存“插件名称 -> 插件构造函数”，根据 YAML 中的名称动态创建插件。
 	plugins map[string]func() (ports.RunnerPlugin, error)
+
+	// validators 保存可由 runner.output-validator 选择的确定性输出校验器。
+	validators map[string]validation.Validator
 
 	// router 负责把模型返回的 tool call 路由到实际工具。
 	router ports.ToolRouter
@@ -45,15 +50,22 @@ type Agent struct {
 // Runner 是应用级执行入口。
 // 它负责校验会话参数、执行插件 Hook，然后调用入口 Agent。
 type Runner struct {
-	appName string
-	agent   ports.Agent
-	plugins []ports.RunnerPlugin
-	counter *atomic.Uint64
+	appName   string
+	agent     ports.Agent
+	plugins   []ports.RunnerPlugin
+	validator validation.Validator
+	counter   *atomic.Uint64
 }
 
-// NewFactory 创建默认 Factory，并注册项目内置插件。
+// NewFactory 创建默认 Factory，并注册项目内置插件和确定性输出校验器。
 func NewFactory() *Factory {
-	return &Factory{plugins: defaultPlugins()}
+	drawioValidator := drawio.NewValidator()
+	return &Factory{
+		plugins: defaultPlugins(),
+		validators: map[string]validation.Validator{
+			drawioValidator.Name(): drawioValidator,
+		},
+	}
 }
 
 // UseToolRouter 向 Factory 注入工具路由器。
@@ -97,8 +109,9 @@ func (f *Factory) NewSequentialAgent(_ context.Context, config model.AgentWorkfl
 	return newWorkflowAgent("sequential", config, subAgents, f.router)
 }
 
-// NewRunner 根据入口 Agent 和插件名称列表创建真正可执行的 Runner。
-func (f *Factory) NewRunner(_ context.Context, appName string, agent ports.Agent, pluginNames []string) (model.Runner, error) {
+// NewRunner 根据入口 Agent、插件和可选输出校验器创建真正可执行的 Runner。
+// 校验器名称在启动组装阶段解析，配置拼错时立即失败，不把问题拖到用户请求阶段。
+func (f *Factory) NewRunner(_ context.Context, appName string, agent ports.Agent, pluginNames []string, outputValidatorName string) (model.Runner, error) {
 	if strings.TrimSpace(appName) == "" {
 		return nil, fmt.Errorf("app name is required")
 	}
@@ -110,12 +123,17 @@ func (f *Factory) NewRunner(_ context.Context, appName string, agent ports.Agent
 	if err != nil {
 		return nil, err
 	}
+	validator, err := f.resolveValidator(outputValidatorName)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Runner{
-		appName: appName,
-		agent:   agent,
-		plugins: plugins,
-		counter: &f.sessionCounter,
+		appName:   appName,
+		agent:     agent,
+		plugins:   plugins,
+		validator: validator,
+		counter:   &f.sessionCounter,
 	}, nil
 }
 
@@ -475,6 +493,9 @@ func (r *Runner) Run(userID, sessionID string, content model.ChatContent) ([]str
 	if err != nil {
 		return nil, err
 	}
+	if err := r.validateOutput(output); err != nil {
+		return nil, err
+	}
 
 	if output == "" {
 		return []string{}, nil
@@ -508,12 +529,44 @@ func (r *Runner) Stream(userID, sessionID string, content model.ChatContent) (<-
 			return
 		}
 
+		// A validator needs the complete document. For configured workflows we
+		// therefore validate the final output before exposing any success value.
+		if r.validator != nil {
+			output, err := impl.run(context.Background(), content)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if err := r.validateOutput(output); err != nil {
+				errs <- err
+				return
+			}
+			if output != "" {
+				outputs <- output
+			}
+			return
+		}
+
 		if err := impl.stream(context.Background(), content, outputs); err != nil {
 			errs <- err
 		}
 	}()
 
 	return outputs, errs
+}
+
+// validateOutput 对完整最终输出执行 Guardrail。失败时保留结构化 Result，
+// 供 HTTP 错误响应和后续 Repair Loop 使用，而不是只返回一段不可解析的文字。
+func (r *Runner) validateOutput(output string) error {
+	if r.validator == nil {
+		return nil
+	}
+
+	result := r.validator.Validate(output)
+	if result.Passed {
+		return nil
+	}
+	return &validation.Error{Validator: r.validator.Name(), Result: result}
 }
 
 // notifyPlugins 按 YAML 配置顺序触发 OnUserMessage 和 BeforeAgent Hook。
@@ -602,6 +655,20 @@ func (f *Factory) resolvePlugins(names []string) ([]ports.RunnerPlugin, error) {
 	}
 
 	return plugins, nil
+}
+
+// resolveValidator 根据 YAML 名称解析可选 Guardrail；空名称用于兼容普通 Agent。
+func (f *Factory) resolveValidator(name string) (validation.Validator, error) {
+	validatorName := strings.TrimSpace(name)
+	if validatorName == "" {
+		return nil, nil
+	}
+
+	validator, ok := f.validators[validatorName]
+	if !ok {
+		return nil, fmt.Errorf("runner output validator %q is not registered", validatorName)
+	}
+	return validator, nil
 }
 
 // newMyTestPlugin 创建项目自定义的测试插件。

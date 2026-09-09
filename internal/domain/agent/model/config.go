@@ -94,4 +94,6 @@ type AgentWorkflowConfig struct {
 type RunnerConfig struct {
 	AgentName      string   `yaml:"agent-name" json:"agentName"`
 	PluginNameList []string `yaml:"plugin-name-list" json:"pluginNameList"`
+	// OutputValidator 为空时保持原 Runner 行为；有值时选择最终输出 Guardrail。
+	OutputValidator string `yaml:"output-validator,omitempty" json:"outputValidator,omitempty"`
 }
