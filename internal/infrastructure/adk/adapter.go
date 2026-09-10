@@ -9,6 +9,7 @@ import (
 	"ai-agent-scaffold/internal/domain/agent/model"
 	"ai-agent-scaffold/internal/domain/agent/ports"
 	"ai-agent-scaffold/internal/domain/diagram/drawio"
+	diagramworkflow "ai-agent-scaffold/internal/domain/diagram/workflow"
 	"ai-agent-scaffold/internal/domain/validation"
 
 	"google.golang.org/adk/plugin"
@@ -35,16 +36,19 @@ type Factory struct {
 }
 
 // Agent 是项目内部统一的运行时 Agent 实现。
-// kind 决定它是普通 LLM Agent，还是 sequential/parallel/loop Workflow Agent。
+// kind 决定它是普通 LLM Agent，还是某一种 Workflow Agent。
 type Agent struct {
-	name        string
-	kind        string
-	description string
-	instruction string
-	outputKey   string
-	chatModel   ports.ChatModel
-	router      ports.ToolRouter
-	subAgents   []ports.Agent
+	name              string
+	kind              string
+	description       string
+	instruction       string
+	outputKey         string
+	chatModel         ports.ChatModel
+	router            ports.ToolRouter
+	subAgents         []ports.Agent
+	diagramController *diagramworkflow.Controller
+	// runCounter 只生成进程内唯一运行标识；请求状态仍全部保存在 Controller.Run 的局部变量中。
+	runCounter atomic.Uint64
 }
 
 // Runner 是应用级执行入口。
@@ -175,6 +179,8 @@ func (a *Agent) runWithVars(ctx context.Context, content model.ChatContent, vars
 		return a.runLLM(ctx, content, vars)
 	case "sequential":
 		return a.runSequential(ctx, content, vars)
+	case "drawio-repair":
+		return a.runDrawIORepair(ctx, content)
 	case "loop", "parallel":
 		// 原项目当前把 loop 和 parallel 都实现为依次执行并聚合结果的 fan-out。
 		return a.runFanOut(ctx, content, vars)
@@ -212,7 +218,12 @@ func (a *Agent) runLLM(ctx context.Context, content model.ChatContent, vars map[
 		applyVars(a.instruction, vars),
 		firstText(content),
 	)
+	return a.runLLMMessages(ctx, messages)
+}
 
+// runLLMMessages 承担普通 Agent 与协议角色共用的“模型 -> 工具 -> 模型”循环。
+// 拆出这一层后，Reviewer/Repairer 适配器仍复用原有工具调用能力，而不复制运行时逻辑。
+func (a *Agent) runLLMMessages(ctx context.Context, messages []ports.ChatMessage) (string, error) {
 	for iter := 0; iter < maxToolCallIterations; iter++ {
 		reply, err := a.chatModel.Generate(ctx, messages)
 		if err != nil {

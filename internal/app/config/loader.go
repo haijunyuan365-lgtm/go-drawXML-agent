@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"ai-agent-scaffold/internal/domain/agent/model"
+	diagramworkflow "ai-agent-scaffold/internal/domain/diagram/workflow"
 
 	"gopkg.in/yaml.v3"
 )
@@ -121,8 +122,14 @@ func normalizeDefaults(table *model.AiAgentConfigTable) {
 	}
 
 	for i := range table.Module.AgentWorkflows {
-		if table.Module.AgentWorkflows[i].MaxIterations == 0 {
-			table.Module.AgentWorkflows[i].MaxIterations = 3
+		workflow := &table.Module.AgentWorkflows[i]
+		// max-iterations 只属于旧 loop 工作流；不能把它静默当成质量修复预算。
+		if workflow.Type == model.WorkflowTypeLoop && workflow.MaxIterations == 0 {
+			workflow.MaxIterations = 3
+		}
+		if workflow.Type == model.WorkflowTypeDrawIORepair && workflow.MaxRepairs == nil {
+			defaultMaxRepairs := diagramworkflow.DefaultMaxRepairs
+			workflow.MaxRepairs = &defaultMaxRepairs
 		}
 	}
 }
@@ -160,15 +167,26 @@ func validateTable(
 			prefix,
 		)
 	}
+	agentNames := make(map[string]struct{}, len(table.Module.Agents))
 	for i, agent := range table.Module.Agents {
 		//检查 Agent 名称
-		if strings.TrimSpace(agent.Name) == "" {
+		agentName := strings.TrimSpace(agent.Name)
+		if agentName == "" {
 			return fmt.Errorf(
 				"%s: module.agents[%d].name is required",
 				prefix,
 				i,
 			)
 		}
+		if _, exists := agentNames[agentName]; exists {
+			return fmt.Errorf(
+				"%s: module.agents[%d].name is duplicated: %s",
+				prefix,
+				i,
+				agentName,
+			)
+		}
+		agentNames[agentName] = struct{}{}
 		//检查agent简要说明，Agent 的 instruction 一般就是系统提示词
 		if strings.TrimSpace(agent.Instruction) == "" {
 			return fmt.Errorf(
@@ -179,12 +197,17 @@ func validateTable(
 		}
 	}
 
+	availableNames := make(map[string]struct{}, len(agentNames)+len(table.Module.AgentWorkflows))
+	for name := range agentNames {
+		availableNames[name] = struct{}{}
+	}
 	for i, workflow := range table.Module.AgentWorkflows {
 		//检查 Workflow 类型是否合法
 		switch workflow.Type {
 		case model.WorkflowTypeLoop,
 			model.WorkflowTypeParallel,
-			model.WorkflowTypeSequential:
+			model.WorkflowTypeSequential,
+			model.WorkflowTypeDrawIORepair:
 		default:
 			return fmt.Errorf(
 				"%s: module.agent-workflows[%d].type is invalid: %s",
@@ -194,13 +217,58 @@ func validateTable(
 			)
 		}
 		//检查 Workflow 名称
-		if strings.TrimSpace(workflow.Name) == "" {
+		workflowName := strings.TrimSpace(workflow.Name)
+		if workflowName == "" {
 			return fmt.Errorf(
 				"%s: module.agent-workflows[%d].name is required",
 				prefix,
 				i,
 			)
 		}
+		if _, exists := availableNames[workflowName]; exists {
+			return fmt.Errorf(
+				"%s: module.agent-workflows[%d].name conflicts with an existing agent or workflow: %s",
+				prefix,
+				i,
+				workflowName,
+			)
+		}
+
+		if workflow.Type == model.WorkflowTypeDrawIORepair {
+			if err := validateDrawIORepairWorkflow(prefix, i, workflow, agentNames); err != nil {
+				return err
+			}
+		} else {
+			if workflow.MaxRepairs != nil || workflow.Roles != (model.DrawIORepairRoles{}) {
+				return fmt.Errorf(
+					"%s: module.agent-workflows[%d] can only use roles/max-repairs with type %s",
+					prefix,
+					i,
+					model.WorkflowTypeDrawIORepair,
+				)
+			}
+			for subIndex, reference := range workflow.SubAgents {
+				if _, exists := availableNames[strings.TrimSpace(reference)]; !exists {
+					return fmt.Errorf(
+						"%s: module.agent-workflows[%d].sub-agents[%d] references unknown or not-yet-built agent %q",
+						prefix,
+						i,
+						subIndex,
+						reference,
+					)
+				}
+			}
+		}
+
+		availableNames[workflowName] = struct{}{}
+	}
+
+	if _, exists := availableNames[strings.TrimSpace(table.Module.Runner.AgentName)]; !exists {
+		return fmt.Errorf(
+			"%s: module.runner.agent-name references unknown agent or workflow %q",
+			prefix,
+			table.Module.Runner.AgentName,
+		)
 	}
 
 	for i, tool := range table.Module.ChatModel.ToolMCPList {
@@ -209,6 +277,63 @@ func validateTable(
 		}
 	}
 
+	return nil
+}
+
+// validateDrawIORepairWorkflow 在启动期检查四角色和预算，避免请求执行到一半才发现装配错误。
+func validateDrawIORepairWorkflow(
+	prefix string,
+	index int,
+	workflow model.AgentWorkflowConfig,
+	agentNames map[string]struct{},
+) error {
+	fieldPrefix := fmt.Sprintf("%s: module.agent-workflows[%d]", prefix, index)
+	if len(workflow.SubAgents) != 0 {
+		return fmt.Errorf("%s cannot define sub-agents for type %s; use roles", fieldPrefix, workflow.Type)
+	}
+	if workflow.MaxIterations != 0 {
+		return fmt.Errorf("%s cannot define max-iterations for type %s; use max-repairs", fieldPrefix, workflow.Type)
+	}
+	if workflow.MaxRepairs == nil {
+		return fmt.Errorf("%s.max-repairs is required after defaults are applied", fieldPrefix)
+	}
+	if *workflow.MaxRepairs < 0 || *workflow.MaxRepairs > diagramworkflow.MaxSupportedRepairs {
+		return fmt.Errorf(
+			"%s.max-repairs must be between 0 and %d",
+			fieldPrefix,
+			diagramworkflow.MaxSupportedRepairs,
+		)
+	}
+
+	roleValues := []struct {
+		field string
+		name  string
+	}{
+		{field: "analyst", name: workflow.Roles.Analyst},
+		{field: "drawer", name: workflow.Roles.Drawer},
+		{field: "reviewer", name: workflow.Roles.Reviewer},
+		{field: "repairer", name: workflow.Roles.Repairer},
+	}
+	seen := make(map[string]string, len(roleValues))
+	for _, role := range roleValues {
+		name := strings.TrimSpace(role.name)
+		if name == "" {
+			return fmt.Errorf("%s.roles.%s is required", fieldPrefix, role.field)
+		}
+		if _, exists := agentNames[name]; !exists {
+			return fmt.Errorf("%s.roles.%s references unknown agent %q", fieldPrefix, role.field, role.name)
+		}
+		if previousRole, exists := seen[name]; exists {
+			return fmt.Errorf(
+				"%s.roles.%s duplicates roles.%s agent %q",
+				fieldPrefix,
+				role.field,
+				previousRole,
+				name,
+			)
+		}
+		seen[name] = role.field
+	}
 	return nil
 }
 

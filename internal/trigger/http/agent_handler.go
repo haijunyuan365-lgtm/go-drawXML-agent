@@ -8,6 +8,7 @@ import (
 	"ai-agent-scaffold/internal/api/dto"
 	"ai-agent-scaffold/internal/api/response"
 	"ai-agent-scaffold/internal/domain/agent/service/chat"
+	diagramworkflow "ai-agent-scaffold/internal/domain/diagram/workflow"
 	"ai-agent-scaffold/internal/domain/validation"
 	"ai-agent-scaffold/pkg/types"
 
@@ -163,6 +164,20 @@ func writeError(c *gin.Context, err error) {
 				types.CodeOutputValidationFailed,
 				validationErr.Error(),
 				validationErr,
+			),
+		)
+		return
+	}
+
+	// 质量闭环失败不是一张可交付图纸；保留稳定 code/stage，供前端和排错使用。
+	var workflowFailure *diagramworkflow.Failure
+	if errors.As(err, &workflowFailure) {
+		c.JSON(
+			http.StatusOK,
+			response.FailureWithData(
+				types.CodeDiagramWorkflowFailed,
+				workflowFailure.Error(),
+				workflowFailure,
 			),
 		)
 		return

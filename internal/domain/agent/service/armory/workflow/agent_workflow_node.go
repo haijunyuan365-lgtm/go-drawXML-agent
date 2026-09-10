@@ -26,14 +26,16 @@ func NewAgentWorkflowNode(agentFactory ports.AgentFactory, next armory.Handler) 
 		model.WorkflowTypeLoop,
 		model.WorkflowTypeParallel,
 		model.WorkflowTypeSequential,
+		model.WorkflowTypeDrawIORepair,
 	}
 
 	return &AgentWorkflowNode{
 		next: next,
 		builders: map[model.WorkflowType]workflowBuilder{
-			model.WorkflowTypeLoop:       NewLoopNode(agentFactory),
-			model.WorkflowTypeParallel:   NewParallelNode(agentFactory),
-			model.WorkflowTypeSequential: NewSequentialNode(agentFactory),
+			model.WorkflowTypeLoop:         NewLoopNode(agentFactory),
+			model.WorkflowTypeParallel:     NewParallelNode(agentFactory),
+			model.WorkflowTypeSequential:   NewSequentialNode(agentFactory),
+			model.WorkflowTypeDrawIORepair: NewDrawIORepairNode(agentFactory),
 		},
 		buildOrder: buildOrder,
 	}
@@ -51,7 +53,13 @@ func (n *AgentWorkflowNode) Apply(ctx context.Context, command model.ArmoryComma
 	dynamic.SetCurrentWorkflow(&workflow)
 	dynamic.AddCurrentStepIndex()
 
-	subAgents := dynamic.QueryAgentList(workflow.SubAgents)
+	// 普通 Workflow 沿用 sub-agents；Draw.io 闭环按显式角色引用查询，
+	// 防止仅凭数组位置把 Reviewer 和 Repairer 接反。
+	references := workflow.SubAgents
+	if workflow.Type == model.WorkflowTypeDrawIORepair {
+		references = workflow.Roles.AgentNames()
+	}
+	subAgents := dynamic.QueryAgentList(references)
 
 	agent, err := n.build(ctx, workflow, subAgents)
 	if err != nil {

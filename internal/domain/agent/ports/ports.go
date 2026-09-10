@@ -80,6 +80,8 @@ type AgentFactory interface {
 	NewLoopAgent(ctx context.Context, config model.AgentWorkflowConfig, subAgents []Agent) (Agent, error)
 	NewParallelAgent(ctx context.Context, config model.AgentWorkflowConfig, subAgents []Agent) (Agent, error)
 	NewSequentialAgent(ctx context.Context, config model.AgentWorkflowConfig, subAgents []Agent) (Agent, error)
+	// NewDrawIORepairAgent 把显式四角色配置装配成带确定性门禁的有限修复工作流。
+	NewDrawIORepairAgent(ctx context.Context, config model.AgentWorkflowConfig, subAgents []Agent) (Agent, error)
 }
 
 type Agent interface {

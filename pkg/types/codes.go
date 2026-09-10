@@ -11,4 +11,6 @@ const (
 	InfoAgentNotFound          = "agent not found"
 	CodeOutputValidationFailed = "0004"
 	InfoOutputValidationFailed = "output validation failed"
+	CodeDiagramWorkflowFailed  = "0005"
+	InfoDiagramWorkflowFailed  = "diagram workflow failed"
 )

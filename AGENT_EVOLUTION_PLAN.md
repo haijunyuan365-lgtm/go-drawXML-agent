@@ -11,13 +11,13 @@
 
 | 项目 | 当前状态 |
 |---|---|
-| 本次交付 | 原项目事实基线全面复核；纠正计划与 Day 1 学习文档中的不准确描述；Day 2 代码保持不变 |
-| 现状核对 | 已以 Day 1 保存的 75 个原应用文件快照为基准，逐层核对启动、配置装配、模型、Agent/Workflow、MCP/Skill、Session、HTTP/SSE、前端和可选基础设施；并与 Day 2 当前工作区区分 |
-| 代码实施 | Day 2 Validator 已接到原 Reviewer 最终输出边界；Reviewer 协议 / Repair / SSE 尚未开始 |
-| 用户学习进度 | S00、S02 讲解与练习已提供，待用户复述 |
-| 最新验证 | 2026-09-08 重新执行 `go test -count=1 ./...` 全量通过；`.env` 关键变量均已配置且离线配置可加载；中转站 TCP 当前可达但未重新验证鉴权/模型调用；前端 lint 当前有 4 个错误和 2 个警告，记录为原有基线问题 |
-| 当前进度 | Day 2 完成；确定性校验与接入测试通过，真实成功图纸基线仍待合适时机补采 |
-| 下一次行动 | 进入 Day 3：定义 Reviewer 严格 JSON 协议与独立 Repair 模板，保持现有绘图入口返回 XML |
+| 本次交付 | Day 5 / S05 前半：新增配置驱动 `drawio-repair` 工作流、四角色生产适配器、Factory/Runner/同步 HTTP 接入、结构化失败响应和完整学习文档 |
+| 现状核对 | Day 4 Controller 已进入原 YAML → Armory → Factory → Runner → ChatService → HTTP 链路；通用 `runSequential` 与旧 `sequential_draw_process` 继续保留，baseline 显式锁定旧入口 |
+| 代码实施 | Loader 启动期校验四角色与 `max-repairs`；Factory 按名称绑定现有 Agent 并检查 Reviewer/Repairer 协议；成功只返回 `state.final_xml`，失败返回业务码 `0005` 与 code/stage |
+| 用户学习进度 | S00、S02、S03、S04、S05 学习文档与练习已提供，均待用户复述 |
+| 最新验证 | 2026-09-10 配置、完整同步 HTTP 成功/失败链路、错误映射和 baseline 回归测试通过；一次修复成功离线证据为 5 次模型调用，持续坏修复为 4 次且 Reviewer 为 0；`go test -count=1 ./...` 与 `go vet ./...` 全量通过 |
+| 当前进度 | Day 5 完成；S05 的生产配置与同步入口集成完成，HTTP Context 贯穿、整次超时、主动取消和真实图纸验证留到 Day 6 收尾 |
+| 下一次行动 | 进入 Day 6 / S05 收尾：让请求 Context 从 HTTP 贯穿 Service、Runner、插件、Agent、模型与工具，增加整次工作流超时并验证取消后不再启动 Repair |
 | 交付周期 | 2026-09-08（Day 1）至 2026-09-22（Day 15），连续 15 个自然日 |
 | 学习安排 | 默认用户每天预留约 1–2 小时听讲、操作和复述；这是安排参考，不要求用户等待或亲自完成全部编码 |
 | 本轮不实施 | S12—S14 Memory 功能，保留为后续候选，不占用这 15 天 |
@@ -242,7 +242,7 @@ Validator 是普通 Go 代码，不需要包装成一个调用模型的 Agent。
 
 ### 5.3 审查协议与失败分类
 
-建议的审查结果示意，最终字段在 S03 固定：
+Day 3 / S03 已固定的审查结果协议：
 
 ```json
 {
@@ -260,8 +260,9 @@ Validator 是普通 Go 代码，不需要包装成一个调用模型的 Agent。
 规则：
 
 - Validator 的 `dangling_reference` 表示引用了不存在的对象；Reviewer 的 `missing_edge` 表示漏了需求中的关系，两者分开记录。
-- `passed` 必须显式存在且为布尔值；`issues` 必须是符合约定的数组；`passed=true` 要求没有阻断问题。
-- 空回复、错误字段类型、截断 JSON、缺少必需字段、互相矛盾的结果，都不能默认为通过。
+- `passed` 必须显式存在且为布尔值；`issues` 必须是符合约定的数组；第一版所有 issue 都是阻断问题，因此 `passed` 当且仅当 `issues` 为空。
+- 每个 issue 必须显式包含非空 `type`、非空 `description` 和数组类型 `element_ids`；无法定位已有元素时使用空数组。`type` 第一版保持可扩展，不冻结枚举。
+- 空回复、Markdown 包裹、未知字段、错误字段类型、截断 JSON、缺少必需字段、额外 JSON/文字、互相矛盾的结果，都不能默认为通过。
 - 第一版采用提示词约束 + 严格解析 + 业务校验。是否使用供应商原生结构化输出，根据当时接口能力验证，不预设必需。
 - 第一版审查协议错误直接返回 `review_protocol_error`，不悄悄追加模型调用；日后若增加协议重试，应独立计数和评测。
 - 质量失败可以进入 Repair；网络、鉴权、工具或模型调用失败先明确报错，暂不叠加自动网络重试策略。
@@ -571,9 +572,9 @@ Day 1 已于 2026-09-08 开始，Day 15 为 2026-09-22；实际起止日期已�
 | S00 现有请求链路 | 已完成 | 部分验证 | 待复述 |
 | S01 基线与案例 | 已完成 | 部分验证 | 待复述 |
 | S02 XML Validator | 已完成 | 通过 | 待复述 |
-| S03 Reviewer/Repair 协议 | 未开始 | 未验证 | 待讲解 |
-| S04 有限修复循环 | 未开始 | 未验证 | 待讲解 |
-| S05 集成与取消/超时 | 未开始 | 未验证 | 待讲解 |
+| S03 Reviewer/Repair 协议 | 已完成 | 通过 | 待复述 |
+| S04 有限修复循环 | 已完成 | 通过 | 待复述 |
+| S05 集成与取消/超时 | 进行中（Day 5 接入完成） | 部分验证 | 待复述 |
 | S06 工作流事件 | 未开始 | 未验证 | 待讲解 |
 | S07 SSE 传输 | 未开始 | 未验证 | 待讲解 |
 | S08 前端进度 | 未开始 | 未验证 | 待讲解 |
@@ -675,3 +676,57 @@ Day 1 已于 2026-09-08 开始，Day 15 为 2026-09-22；实际起止日期已�
 - 工程状态：当前已有 Git；Day 1 快照继续作为原始行为基线。Go 回归此前通过；本次前端 lint 发现 4 个错误和 2 个警告，记作后续前端日需要处理的基线，不在本次文档纠偏中改业务代码。
 - 修改范围：只修改计划与 S00 学习文档，没有修改业务代码、YAML 或 .env。
 - 下一次：继续 Day 3 / S03，基于纠正后的事实设计 Reviewer JSON 协议和独立 Repair 模板。
+
+### 2026-09-09：Day 3 / S03
+
+- 当天目标及完成情况：固定 Reviewer JSON Schema、严格解析和错误分类；建立独立 Repair 输入/输出协议；保护现有 XML 对外边界。目标完成。
+- 本次解决的问题：原 Reviewer 在一次调用里同时检查和修图，只返回最终 XML，程序无法区分语义不合格与模型没有遵守审查协议。Day 3 将“判断”和“修改”拆为可被后续控制器消费的两个领域协议。
+- 实际修改/交付文件：新增 `internal/domain/diagram/reviewer/protocol.go` 及测试、新增 `internal/domain/diagram/repair/protocol.go` 及测试、扩展 `internal/app/config/loader_test.go`、新增 `docs/learning/S03-Reviewer-Repair-协议.md`、更新本计划。
+- 新增代码及逐块讲解覆盖情况：学习文档逐块覆盖 Reviewer 输入/提示/Parser/错误，Repair 统一问题结构/适配/提示/XML 解析，以及生产配置边界测试。
+- 修改代码的改前/改后与修改原因：改前只有“Reviewer 检查并直接修图后返回 XML”；改后新增“Reviewer 返回可信 JSON 结论、Repair 根据最新候选和本轮问题返回 XML”的独立协议，但生产链暂不切换，避免 JSON 进入画布。
+- 删除代码、删除原因及替代方案（无则明确写无）：无实质业务删除；配置测试中的重复 YAML 加载代码提取为测试辅助函数，原断言保留。
+- 关键代码注释检查结果：核心协议类型、严格解析不变量、Repair 问题来源、坏修复分类和兼容边界均有原因型注释；未对明显赋值逐行加噪声注释。
+- 当天学习文档路径与详细标准检查结果：`docs/learning/S03-Reviewer-Repair-协议.md`；覆盖原行为、数据流、改动表、逐逻辑块、Before/After、删除说明、完整示例、测试证据、限制/排错、面试表达、术语/练习和下一步。
+- 已验证的行为、对应测试与命令结果：Reviewer 通过/质量拒绝可区分；空回复、截断、代码块、缺字段、错类型、未知字段、矛盾和尾随内容均成为 `review_protocol_error`；Repair 收到当前候选及带来源问题，合法 XML 原样返回，非裸或坏结构 XML 成为 `validation.Error`；真实 YAML 仍以原 Reviewer XML + `drawio-xml` 收尾。相关包测试与 `go test -count=1 ./...` 全量通过，`git diff --check` 无空白错误。
+- 尚未验证/当前限制：未调用真实模型、未运行自动修复循环、未映射新的 HTTP 错误码、未在 Draw.io 画布加载新结果；未采用供应商原生 Structured Output；Reviewer 的布局判断仍不是实际渲染验证。
+- 用户已经复述的内容：暂无。
+- 待讲解或待补练习：复述质量拒绝与协议错误的区别、wire 指针字段的作用、为什么坏 Repair 归入确定性校验问题；完成学习文档中的未知字段测试练习。
+- 设计调整及原因：Reviewer `type` 保持可扩展而字段结构严格；Repair issues 保留 `validator/reviewer` 来源；提示 payload 使用 JSON 编码但关闭 HTML 转义，使 XML 标签可读且不靠脆弱分隔符。
+- 进度偏差、阻断与补救方式：Codex 内置文件沙箱出现 `helper_unknown_error`，改用同一 `apply_patch` 程序的 PowerShell 7 入口完成补丁；功能范围和验证未缩减。
+- 下一次从哪里继续：Day 4 / S04，基于现有协议实现请求级状态和最多两次 Repair 的有限控制器；先用模型替身离线覆盖所有状态与退出分支，不提前改 HTTP。
+
+### 2026-09-09：Day 4 / S04
+
+- 当天目标及完成情况：实现请求级状态和默认最多两次的有限 Repair Loop；用离线模型替身覆盖成功、修复、预算、协议、模型错误、取消和隔离。目标完成。
+- 本次解决的问题：Day 3 只有 Reviewer/Repair 数据协议，没有程序负责按 Validator/Reviewer 结果更新候选、控制修复次数和决定最终交付。Day 4 新增领域状态机，避免把最后一个模型字符串未经完整检查直接当成功。
+- 实际修改/交付文件：新增 `internal/domain/diagram/workflow/controller.go`、`internal/domain/diagram/workflow/controller_test.go`、`docs/learning/S04-有限-Repair-Loop.md`；扩展 `internal/domain/diagram/repair/protocol.go` 的 Validator 注入入口；更新本计划。
+- 新增代码及逐块讲解覆盖情况：学习文档第 2 节先单独说明两个新增代码文件的具体作用、调用方和目录原因；第 6 节逐块覆盖状态/失败模型、四个窄接口、构造校验、一次性阶段、有限循环、候选评估、Context/错误收尾、测试替身和所有测试；第 3 节给出最新整体流程图与状态图。
+- 修改代码的改前/改后与修改原因：改前 Repair Parser 固定创建 Validator，且没有闭环调用者；改后旧 `ParseResponse` 保持兼容，新 `ParseResponseWithValidator` 允许控制器复用同一依赖，Controller 明确执行 Validator -> Reviewer -> Repair -> Validator，并只在全通过后写 `final_xml`。
+- 删除代码、删除原因及替代方案（无则明确写无）：无实质业务删除；Repair 原默认解析入口改为委托新函数，旧签名和行为保留。
+- 关键代码注释检查结果：核心状态、`attempt`/`repairs_used` 区别、接口边界、无共享状态、预算检查、坏修复重新校验、失败终态和 Context 分类均有原因型中文注释；明显赋值未逐行加噪声注释。
+- 当天学习文档路径与详细标准检查结果：`docs/learning/S04-有限-Repair-Loop.md`；覆盖本日问题、文件作用、两张 Mermaid 流程图、状态字段、改动表、逐逻辑块、Before/After、删除说明、成功/失败运行示例、测试证据、限制/排错、Repair/Retry 对比、面试表达、术语/练习和 Day 5 入口。
+- 已验证的行为、对应测试与命令结果：首次通过不调用 Repair；一次修复使用最新候选和 Reviewer 问题；坏修复跳过 Reviewer 并把 Validator 问题交给下一轮；持续失败与零预算不会超额调用；协议错误不进入 Repair；四个模型角色错误按 `model_error + stage` 定位；Analyst/Drawer/Repair 空输出在产出阶段直接失败且不伪造候选；取消后不启动下一阶段；同一 Controller 的并发 Run 状态隔离；无效预算/缺失依赖在构造时拒绝。相关包测试、`go vet ./internal/domain/diagram/repair ./internal/domain/diagram/workflow` 和 `go test -count=1 ./...` 通过；workflow 语句覆盖率 85.4%。
+- 尚未验证/当前限制：未接生产 YAML/Factory/Runner/HTTP，未调用真实模型，未在 Draw.io 加载新图，未采集耗时/usage/事件；`go test -race` 默认因 CGO 关闭无法运行，显式启用后确认本机缺少 `gcc`，因此不把 race detector 写成通过。
+- 用户已经复述的内容：暂无。
+- 待讲解或待补练习：复述 `attempt` 与 `repairs_used` 的差异、质量拒绝与协议错误的退出差异、为什么坏 Repair 必须跳过 Reviewer；完成学习文档中把预算改为 1 的调用次数预测练习。
+- 设计调整及原因：采用“稳定 FailureCode + Stage”而不是为每个角色复制错误码；Controller 只存不可变依赖、State 在 Run 内创建；Reviewer/Repair 端口返回原始文本以确保 Day 3 严格 Parser 不被适配器绕过；`run_id` 暂由调用方提供，方便 Day 7 事件关联。
+- 进度偏差、阻断与补救方式：Codex 内置文件沙箱继续出现 `helper_unknown_error`，沿用 Day 3 已验证的同一 Codex `apply_patch` 引擎显式入口完成补丁；`-race` 受本机 C 工具链阻断，已用并发隔离测试加原子计数提供当前证据，并保留后续补跑项。
+- 下一次从哪里继续：Day 5 / S05，从生产适配器与显式绘图工作流配置开始，将现有 Agent 输出映射到四个窄端口，再接 Factory/Runner/同步入口；成功必须返回 `state.final_xml`，不提前扩展 SSE 或前端。
+
+### 2026-09-10：Day 5 / S05 配置与同步入口集成
+
+- 当天目标及完成情况：把 Day 4 有限 Repair Loop 接回原 YAML、Armory、Factory、Runner、ChatService 和 `/api/v1/chat`；成功响应保持原 `content` 裸 XML 形态，旧串行流程保留作对照。Day 5 范围完成，S05 的 Context/超时/取消部分按日程留到 Day 6。
+- 本次解决的问题：Day 4 Controller 只能被测试代码调用，生产 Runner 仍返回串行流程最后一个字符串。Day 5 新增 `drawio-repair` 执行策略，由配置显式绑定 Analyst/Drawer/Reviewer/Repairer，并且只把通过 Validator 和 Reviewer 的 `FinalXML` 交给 Runner。
+- 实际修改/交付文件：新增 `internal/domain/agent/service/armory/workflow/drawio_repair_node.go`、`internal/infrastructure/adk/diagram_workflow.go`、`internal/infrastructure/adk/diagram_workflow_test.go`、`docs/learning/S05-配置驱动接入-Repair-Loop.md`；修改 Agent 配置模型与 Factory 端口、Loader 及测试、Workflow Node、ADK Agent 分发、绘图 YAML、HTTP 错误映射及测试、业务码、baseline 入口、Day 4 过渡注释和本计划。
+- 新增代码及逐块讲解覆盖情况：学习文档第 2 节分别解释三个新增代码文件的用途、调用方和放置层；第 3 节提供最新启动装配图和同步运行图；第 5 节逐块讲解配置指针、Loader、Armory、Factory、四个适配器、运行分发、YAML、baseline 与 HTTP 错误边界。
+- 修改代码的改前/改后与修改原因：改前 Runner 选中 `sequential_draw_process`，最后一个 Reviewer 字符串直接进入最终 Guardrail；改后 Runner 选中 `drawio_repair_process`，Controller 控制 Validator/Reviewer/Repair，只有 `state.final_xml` 返回。`runSequential` 保持通用且未加入 Draw.io 业务分支。
+- 删除代码、删除原因及替代方案（无则明确写无）：无实质业务删除；旧 Reviewer、旧 Sequential Workflow、Day 4 Controller 和原模型工具循环均保留。模型循环从 `runLLM` 下沉为 `runLLMMessages` 后由普通 Agent 与协议角色复用。
+- 关键代码注释检查结果：新工作流配置、`*int` 的 0/未配置语义、Armory Builder 边界、角色名称绑定、协议漂移、请求级 run ID、FinalXML 不变量、HTTP 失败映射和集成测试边界均有原因型中文注释。
+- 当天学习文档路径与详细标准检查结果：`docs/learning/S05-配置驱动接入-Repair-Loop.md`；覆盖本日问题、新增文件具体作用、两张最新 Mermaid 图、改动总表、逐逻辑块、Before/After、无删除说明、成功/失败示例、测试证据、限制/排错、面试表达、术语/练习和 Day 6 起点。
+- 已验证的行为、对应测试与命令结果：真实 YAML 选择新工作流并保留旧流程；默认预算 2 与显式 0 可区分；角色缺失/未知/重复、预算越界、`sub-agents`/`max-iterations` 冲突均在启动前失败；完整同步 HTTP 路径的一次修复成功返回修复稿，共 5 次模型调用；持续坏修复只调用 Analyst、Drawer、Repair 两次，共 4 次且 Reviewer 为 0，最终返回 `0005 + repair_budget_exhausted + validation`；协议提示漂移在 Factory 装配时失败；原 `runSequential`、工具循环、Runner Guardrail 和 baseline 测试继续通过。相关定向测试、`go test -count=1 ./...`、`go vet ./...`、`git diff --check` 与学习文档链接/围栏检查均通过。
+- 尚未验证/当前限制：本日未调用真实模型/MCP、未在浏览器加载新图、未采集真实模型延迟或 token；Runner 与插件仍使用 `context.Background()`，HTTP 断开不能取消在途闭环，整次 Workflow timeout 尚未实现；正式指标存储属于 S09。
+- 用户已经复述的内容：用户已确认 Day 4 是阶段性独立形态，并确认后续继续沿用原架构；Day 5 具体代码尚未复述。
+- 待讲解或待补练习：复述为什么 `max-repairs` 用指针、为什么角色按名称而非下标绑定、为什么不修改通用 `runSequential`、为什么成功修复一次是 5 次模型调用；完成学习文档的零修复预算预测练习。
+- 设计调整及原因：采用同级 `drawio-repair` 策略而非在 `runSequential` 中硬编码业务；Loader 与 Factory 双层校验；Reviewer/Repairer YAML 指令必须匹配领域协议；baseline 强制选旧流程，防止生产 YAML 切换污染 Before 数据。
+- 进度偏差、阻断与补救方式：Codex 文件沙箱仍出现 `helper_unknown_error`，使用同一 Codex 自带 `apply_patch` 引擎的显式命令入口完成仓库内补丁；未缩减实现或验证范围。
+- 下一次从哪里继续：Day 6 / S05，从 Runner 接口增加 Context 开始，沿 HTTP → Service → Runner → plugin/Agent → ChatModel/ToolRouter 贯穿；增加整次工作流 timeout 和取消测试，再视模型可用性执行真实 XML 生成与 Draw.io 加载验证。

@@ -220,7 +220,8 @@ func assembleOriginal(table model.AiAgentConfigTable, provider ports.ModelProvid
 	table.Module.ChatModel.ToolMCPList = nil
 	table.Module.ChatModel.ToolSkillsList = nil
 	// 该命令采集的是 Day 1 的 Before 流程，后续新增的 Guardrail 不能修改或拒绝
-	// 原 Reviewer 输出，否则改造前后的评测口径会混在一起。
+	// 原 Reviewer 输出，也必须显式锁定旧串行入口，否则生产 YAML 切换后 Before 会被污染。
+	table.Module.Runner.AgentName = "sequential_draw_process"
 	table.Module.Runner.OutputValidator = ""
 	recorder := &recordingFactory{Factory: adk.NewFactory(), secret: table.Module.AiAPI.APIKey}
 	registry := ports.NewInMemoryAgentRegistry()

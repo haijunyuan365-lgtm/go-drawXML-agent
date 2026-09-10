@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	diagramworkflow "ai-agent-scaffold/internal/domain/diagram/workflow"
 	"ai-agent-scaffold/internal/domain/validation"
 	"ai-agent-scaffold/pkg/types"
 
@@ -45,5 +46,35 @@ func TestWriteErrorPreservesStructuredValidationIssues(t *testing.T) {
 	}
 	if body.Data.Validator != "drawio-xml" || len(body.Data.Result.Issues) != 1 {
 		t.Fatalf("structured validation data was lost: %+v", body.Data)
+	}
+}
+
+// 验证质量闭环失败会保留领域错误分类，而不是降级成 unknown error 或成功 XML。
+func TestWriteErrorPreservesDiagramWorkflowFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+
+	writeError(ctx, &diagramworkflow.Failure{
+		Code:    diagramworkflow.FailureRepairBudgetExhausted,
+		Stage:   diagramworkflow.StageReview,
+		Message: "repair budget exhausted after 2 repair attempt(s)",
+	})
+
+	var body struct {
+		Code string `json:"code"`
+		Data struct {
+			Code  diagramworkflow.FailureCode `json:"code"`
+			Stage diagramworkflow.Stage       `json:"stage"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Code != types.CodeDiagramWorkflowFailed {
+		t.Fatalf("unexpected code: %q", body.Code)
+	}
+	if body.Data.Code != diagramworkflow.FailureRepairBudgetExhausted || body.Data.Stage != diagramworkflow.StageReview {
+		t.Fatalf("structured workflow failure was lost: %+v", body.Data)
 	}
 }

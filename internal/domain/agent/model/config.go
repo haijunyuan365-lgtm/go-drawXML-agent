@@ -3,9 +3,10 @@ package model
 type WorkflowType string
 
 const (
-	WorkflowTypeLoop       WorkflowType = "loop"
-	WorkflowTypeParallel   WorkflowType = "parallel"
-	WorkflowTypeSequential WorkflowType = "sequential"
+	WorkflowTypeLoop         WorkflowType = "loop"
+	WorkflowTypeParallel     WorkflowType = "parallel"
+	WorkflowTypeSequential   WorkflowType = "sequential"
+	WorkflowTypeDrawIORepair WorkflowType = "drawio-repair"
 )
 
 // AiAgentConfigTable 表示一套完整、独立的 Agent 应用配置
@@ -89,6 +90,24 @@ type AgentWorkflowConfig struct {
 	SubAgents     []string     `yaml:"sub-agents" json:"subAgents"`
 	Description   string       `yaml:"description" json:"description"`
 	MaxIterations int          `yaml:"max-iterations" json:"maxIterations"`
+	// Roles 为 Draw.io 质量闭环显式声明四个角色，避免依赖 sub-agents 的位置猜测职责。
+	Roles DrawIORepairRoles `yaml:"roles,omitempty" json:"roles,omitempty"`
+	// MaxRepairs 使用指针区分“未配置”和显式配置 0；0 是合法的无修复对照模式。
+	MaxRepairs *int `yaml:"max-repairs,omitempty" json:"maxRepairs,omitempty"`
+}
+
+// DrawIORepairRoles 保存质量闭环中每个职责对应的 Agent 名称。
+// 名称仍由 YAML 决定，运行时通过 Armory 已创建的 Agent 解析。
+type DrawIORepairRoles struct {
+	Analyst  string `yaml:"analyst" json:"analyst"`
+	Drawer   string `yaml:"drawer" json:"drawer"`
+	Reviewer string `yaml:"reviewer" json:"reviewer"`
+	Repairer string `yaml:"repairer" json:"repairer"`
+}
+
+// AgentNames 按工作流首次执行顺序返回角色引用，供 Armory 查询真实 Agent。
+func (r DrawIORepairRoles) AgentNames() []string {
+	return []string{r.Analyst, r.Drawer, r.Reviewer, r.Repairer}
 }
 
 type RunnerConfig struct {
